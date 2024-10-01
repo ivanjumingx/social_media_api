@@ -7,6 +7,7 @@ from django.contrib.auth.models import User
 from django.http import Http404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
+from django.db.models import Q
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -40,25 +41,29 @@ class FollowViewSet(viewsets.ModelViewSet):
             # Ensure the 'following' user exists
             following = User.objects.get(username=request.data['following'])
         except User.DoesNotExist:
-            raise Http404("User not found")
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        # Prevent users from following themselves
+        if request.user == following:
+            return Response({"error": "You cannot follow yourself"}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create the follow relationship if not already existing
         follow, created = Follow.objects.get_or_create(follower=request.user, following=following)
         if created:
             return Response(FollowSerializer(follow).data)
         else:
-            return Response({"message": "Already following this user"})
+            return Response({"message": "Already following this user"}, status=status.HTTP_200_OK)
 
     def destroy(self, request, *args, **kwargs):
         try:
             # Ensure the user to be unfollowed exists
             following = User.objects.get(username=kwargs['pk'])
         except User.DoesNotExist:
-            raise Http404("User not found")
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
 
         # Remove the follow relationship
         Follow.objects.filter(follower=request.user, following=following).delete()
-        return Response({"message": "Unfollowed the user"})
+        return Response({"message": "Unfollowed the user"}, status=status.HTTP_200_OK)
 
 
 class UserViewSet(viewsets.ModelViewSet):
@@ -90,6 +95,31 @@ class UserViewSet(viewsets.ModelViewSet):
         if user != request.user:
             return Response({"error": "You can only delete your own profile"}, status=status.HTTP_403_FORBIDDEN)
         return super().destroy(request, *args, **kwargs)
+
+class FeedViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        user = request.user
+        # Get all users the current user is following
+        followed_users = Follow.objects.filter(follower=user).values_list('following', flat=True)
+
+        # Filter posts by followed users
+        posts = Post.objects.filter(author__in=followed_users).order_by('-created_at')
+
+        # Optional: Filter by keyword (search)
+        keyword = request.query_params.get('keyword', None)
+        if keyword:
+            posts = posts.filter(content__icontains=keyword)
+
+        # Optional: Filter by date range
+        start_date = request.query_params.get('start_date', None)
+        end_date = request.query_params.get('end_date', None)
+        if start_date and end_date:
+            posts = posts.filter(created_at__range=[start_date, end_date])
+
+        serializer = PostSerializer(posts, many=True)
+        return Response(serializer.data)
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):

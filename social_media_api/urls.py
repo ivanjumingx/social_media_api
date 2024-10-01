@@ -25,6 +25,7 @@ router = DefaultRouter()
 router.register(r'posts', views.PostViewSet)
 router.register(r'follows', views.FollowViewSet)
 router.register(r'users', views.UserViewSet)
+router.register(r'feed', views.FeedViewSet, basename='feed')
 
 urlpatterns = [
     path('', include(router.urls)),
