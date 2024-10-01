@@ -8,6 +8,8 @@ from django.http import Http404
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.decorators import action
 from django.db.models import Q
+from rest_framework.pagination import PageNumberPagination
+from django.db.models import Count
 
 
 class PostViewSet(viewsets.ModelViewSet):
@@ -107,22 +109,123 @@ class FeedViewSet(viewsets.ViewSet):
         # Filter posts by followed users
         posts = Post.objects.filter(author__in=followed_users).order_by('-created_at')
 
-        # Optional: Filter by keyword (search)
+        # This is Optional: Filter by keyword (search)
         keyword = request.query_params.get('keyword', None)
         if keyword:
             posts = posts.filter(content__icontains=keyword)
 
-        # Optional: Filter by date range
+        # This is Optional: Filter by date range
         start_date = request.query_params.get('start_date', None)
         end_date = request.query_params.get('end_date', None)
         if start_date and end_date:
             posts = posts.filter(created_at__range=[start_date, end_date])
 
-        serializer = PostSerializer(posts, many=True)
-        return Response(serializer.data)
+        # Sorting by 'date' or 'popularity'
+        sort_by = request.query_params.get('sort_by', 'date')
+        if sort_by == 'popularity':  # This could be based on the number of likes or comments
+            posts = posts.annotate(like_count=Count('likes')).order_by('-like_count', '-created_at')
+        else:
+            posts = posts.order_by('-created_at')
+
+        paginator = PageNumberPagination()
+        paginated_posts = paginator.paginate_queryset(posts, request)
+
+        serializer = PostSerializer(paginated_posts, many=True)
+        return paginator.get_paginated_response(serializer.data)
+
 
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def me(self, request):
         # Custom endpoint to fetch the current user's information
         serializer = self.get_serializer(request.user)
+        return Response(serializer.data)
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    queryset = Comment.objects.all()
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_create(self, serializer):
+        serializer.save(author=self.request.user)
+
+
+class LikeViewSet(viewsets.ModelViewSet):
+    queryset = Like.objects.all()
+    serializer_class = LikeSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        post = Post.objects.get(id=request.data['post'])
+        like, created = Like.objects.get_or_create(user=request.user, post=post)
+        if not created:
+            return Response({"message": "Post already liked"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Post liked"}, status=status.HTTP_201_CREATED)
+
+    def destroy(self, request, *args, **kwargs):
+        like = Like.objects.filter(user=request.user, post_id=kwargs['pk'])
+        if like.exists():
+            like.delete()
+            return Response({"message": "Like removed"}, status=status.HTTP_200_OK)
+        return Response({"message": "Like not found"}, status=status.HTTP_404_NOT_FOUND)
+
+
+class NotificationViewSet(viewsets.ModelViewSet):
+    queryset = Notification.objects.all()
+    serializer_class = NotificationSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        return self.queryset.filter(recipient=self.request.user)
+
+
+class MessageViewSet(viewsets.ModelViewSet):
+    queryset = Message.objects.all()
+    serializer_class = MessageSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        return Message.objects.filter(Q(sender=user) | Q(recipient=user))
+
+    def perform_create(self, serializer):
+        serializer.save(sender=self.request.user)
+
+
+
+class RepostViewSet(viewsets.ModelViewSet):
+    queryset = Repost.objects.all()
+    serializer_class = PostSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def create(self, request, *args, **kwargs):
+        original_post = Post.objects.get(id=request.data['post_id'])
+        repost, created = Repost.objects.get_or_create(user=request.user, original_post=original_post)
+        if not created:
+            return Response({"message": "Post already reposted"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"message": "Post reposted"}, status=status.HTTP_201_CREATED)
+
+
+class HashtagViewSet(viewsets.ModelViewSet):
+    queryset = Hashtag.objects.all()
+    serializer_class = HashtagSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        keyword = request.query_params.get('keyword', None)
+        if keyword:
+            hashtags = Hashtag.objects.filter(name__icontains=keyword)
+        else:
+            hashtags = Hashtag.objects.all()
+        serializer = HashtagSerializer(hashtags, many=True)
+        return Response(serializer.data)
+
+
+class TrendingPostViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def list(self, request):
+        # Get posts ordered by the number of likes or reposts within a given time period
+        posts = Post.objects.annotate(like_count=models.Count('likes')).order_by('-like_count', '-created_at')
+        serializer = PostSerializer(posts, many=True)
         return Response(serializer.data)
