@@ -1,8 +1,8 @@
 from django.shortcuts import render
 from rest_framework import viewsets, permissions, status
 from rest_framework.response import Response
-from .models import Post, Follow
-from .serializers import PostSerializer, FollowSerializer, UserSerializer
+from .models import Post, Follow, Comment, Like, Notification, Message, Repost, Hashtag  # Ensure all models are imported
+from .serializers import PostSerializer, FollowSerializer, UserSerializer, CommentSerializer, LikeSerializer, NotificationSerializer, MessageSerializer, HashtagSerializer  # Import the missing serializers
 from django.contrib.auth.models import User
 from django.http import Http404
 from rest_framework.permissions import IsAuthenticated

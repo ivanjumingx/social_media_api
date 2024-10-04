@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
-from .models import Post, Follow, Profile, Comment
+from .models import Post, Follow, Profile, Comment, Like, Notification, Message, Hashtag  # Add missing imports
 
 # Post Serializer
 class PostSerializer(serializers.ModelSerializer):
@@ -64,6 +64,7 @@ class UserSerializer(serializers.ModelSerializer):
         return instance
 
 
+# Comment Serializer
 class CommentSerializer(serializers.ModelSerializer):
     author = serializers.ReadOnlyField(source='author.username')
 
@@ -72,6 +73,7 @@ class CommentSerializer(serializers.ModelSerializer):
         fields = ['id', 'author', 'content', 'created_at']
 
 
+# Like Serializer
 class LikeSerializer(serializers.ModelSerializer):
     user = serializers.ReadOnlyField(source='user.username')
 
@@ -80,12 +82,14 @@ class LikeSerializer(serializers.ModelSerializer):
         fields = ['id', 'user', 'post', 'created_at']
 
 
+# Notification Serializer
 class NotificationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Notification
         fields = ['id', 'recipient', 'message', 'created_at', 'is_read']
 
 
+# Message Serializer
 class MessageSerializer(serializers.ModelSerializer):
     sender = serializers.ReadOnlyField(source='sender.username')
 
@@ -94,6 +98,7 @@ class MessageSerializer(serializers.ModelSerializer):
         fields = ['id', 'sender', 'recipient', 'content', 'created_at', 'is_read']
 
 
+# Hashtag Serializer
 class HashtagSerializer(serializers.ModelSerializer):
     class Meta:
         model = Hashtag
