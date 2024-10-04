@@ -26,6 +26,8 @@ router.register(r'posts', views.PostViewSet)
 router.register(r'follows', views.FollowViewSet)
 router.register(r'users', views.UserViewSet)
 router.register(r'feed', views.FeedViewSet, basename='feed')
+router.register(r'comments', views.CommentViewSet)
+
 
 urlpatterns = [
     path('', include(router.urls)),
